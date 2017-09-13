@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<PluginConfig>
+    <!-- You can add a SupportURL element inside here if you want a context
+         sensitive help link on the config UI - otherwise it will just link
+         to the URL specified in the AboutInformation element. -->
+
+    <Field id="port"
+           type="textfield"
+           defaultValue="8086"
+           tooltip="Port, default 8086">
+        <Label>Port:</Label>
+    </Field>
+    <Field id="debug"
+           type="checkbox">
+        <Label>Debug to Log</Label>
+        <Description>Enabled</Description>
+    </Field>
+</PluginConfig>
+

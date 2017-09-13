@@ -10,7 +10,7 @@ import json
 from indigo_adaptor import IndigoAdaptor
 
 MCAST_GRP = '224.1.1.1'
-MCAST_PORT = 8086
+MCAST_PORT = 8087
 
 class Plugin(indigo.PluginBase):
     def __init__(self, pluginId, pluginDisplayName, pluginVersion, pluginPrefs):

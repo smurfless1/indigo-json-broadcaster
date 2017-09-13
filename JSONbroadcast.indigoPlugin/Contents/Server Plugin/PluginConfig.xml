@@ -6,8 +6,8 @@
 
     <Field id="port"
            type="textfield"
-           defaultValue="8086"
-           tooltip="Port, default 8086">
+           defaultValue="8087"
+           tooltip="Port, default 8087">
         <Label>Port:</Label>
     </Field>
     <Field id="debug"

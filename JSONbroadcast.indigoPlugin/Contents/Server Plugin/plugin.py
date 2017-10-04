@@ -35,10 +35,11 @@ class Plugin(indigo.PluginBase):
             }
         ]
 
+        output = json.dumps(json_body).encode('utf-8')
         if self.pluginPrefs.get(u'debug', False):
-            indigo.server.log(json.dumps(json_body).encode('utf-8'))
+            indigo.server.log(output)
 
-        self.sock.sendto(json.dumps(json_body).encode('utf-8'), (MCAST_GRP, self.port))  # returns bool if needed
+        self.sock.sendto(output, (MCAST_GRP, self.port))  # returns bool if needed
 
     def startup(self):
         self.port = int(self.pluginPrefs.get('port', '8086'))

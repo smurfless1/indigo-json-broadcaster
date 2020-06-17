@@ -12,6 +12,7 @@ from indigo_adaptor import IndigoAdaptor
 MCAST_GRP = '224.1.1.1'
 MCAST_PORT = 8087
 
+
 class Plugin(indigo.PluginBase):
     def __init__(self, pluginId, pluginDisplayName, pluginVersion, pluginPrefs):
         super(Plugin, self).__init__(pluginId, pluginDisplayName, pluginVersion, pluginPrefs)
@@ -23,7 +24,7 @@ class Plugin(indigo.PluginBase):
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-
+        self.sock.bind("0.0.0.0")  # send over all the v4 addresses anyway
 
     # send this a dict of what to write
     def send(self, tags, what, measurement='device_changes'):

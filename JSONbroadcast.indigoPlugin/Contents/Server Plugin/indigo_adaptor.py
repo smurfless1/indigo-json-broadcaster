@@ -2,30 +2,80 @@ from datetime import date, datetime
 import time as time_
 import json
 import indigo
-from enum import Enum
 
-# explicit changes
+
 def indigo_json_serial(obj):
     """JSON serializer for objects not serializable by default json code"""
-    #indigo.server.log(unicode(obj))
+    # indigo.server.log(str(obj))
     if isinstance(obj, (datetime, date)):
         ut = time_.mktime(obj.timetuple())
         return int(ut)
     if isinstance(obj, indigo.Dict):
         dd = {}
-        for key,value in obj.iteritems():
+        for key, value in obj.iteritems():
             dd[key] = value
         return dd
-    raise TypeError ("Type %s not serializable" % type(obj))
+    raise TypeError("Type %s not serializable" % type(obj))
 
-class IndigoAdaptor():
-    '''
+
+def smart_value(in_value, make_numbers=False):
+    """Returns None or a value, trying to convert strings to floats where possible."""
+    value = None
+    if (
+        str(in_value) != "null"
+        and str(in_value) != "None"
+        and not isinstance(in_value, indigo.List)
+        and not isinstance(in_value, list)
+        and not isinstance(in_value, indigo.Dict)
+        and not isinstance(in_value, dict)
+    ):
+        value = in_value
+        try:
+            if make_numbers:
+                # early exit if we want a number but already have one
+                if isinstance(in_value, float):
+                    value = None
+                elif isinstance(in_value, (datetime, date)):
+                    value = None
+                # if we have a string, but it really is a number,
+                # MAKE IT A NUMBER YOU IDIOTS
+                elif isinstance(in_value, str):
+                    value = float(in_value)
+                elif isinstance(in_value, int):
+                    value = float(in_value)
+            elif isinstance(in_value, bool):
+                # bypass for bools - getting cast as ints
+                value = bool(in_value)
+            elif isinstance(in_value, int):
+                # convert ALL numbers to floats for influx
+                value = float(in_value)
+            # convert datetime to timestamps of another flavor
+            elif isinstance(in_value, (datetime, date)):
+                value = time_.mktime(in_value.timetuple())
+                # value = int(ut)
+            # explicitly change enum values to strings
+            # TODO find a more reliable way to change enums to strings
+            elif in_value.__class__.__bases__[0].__name__ == "enum":
+                value = str(in_value)
+        except ValueError:
+            if make_numbers:
+                # if we were trying to force numbers but couldn't
+                value = None
+            pass
+    return value
+
+
+class IndigoAdaptor:
+    """
     Change indigo objects to flat dicts for simpler databases
-    '''
+    """
+
     def __init__(self):
         self.debug = False
         # Class Properties on http://wiki.indigodomo.com/doku.php?id=indigo_7_documentation:device_class
-        self.stringonly = 'displayStateValRaw displayStateValUi displayStateImageSel protocol'.split()
+        self.string_only = (
+            "displayStateValRaw displayStateValUi displayStateImageSel protocol".split()
+        )
 
         # have the json serializer always use this
         json.JSONEncoder.default = indigo_json_serial
@@ -33,146 +83,108 @@ class IndigoAdaptor():
         # remember previous states for diffing, smaller databases
         self.cache = {}
         # remember column name/type mappings to reduce exceptions
-        self.typecache = {}
-
-    # returns None or a value, trying to convert strings to floats where
-    # possible
-    def smart_value(self, invalue, mknumbers=False):
-        value = None
-        if unicode(invalue) != u"null" \
-            and unicode(invalue) != u"None" \
-            and not isinstance(invalue, indigo.List) \
-            and not isinstance(invalue, list) \
-            and not isinstance(invalue, indigo.Dict) \
-            and not isinstance(invalue, dict):
-            value = invalue
-            try:
-                if mknumbers:
-                    # early exit if we want a number but already have one
-                    if isinstance(invalue, float):
-                        value = None
-                    elif isinstance(invalue, (datetime, date)):
-                        value = None
-                    # if we have a string, but it really is a number,
-                    # MAKE IT A NUMBER IDIOTS
-                    elif isinstance(invalue, basestring):
-                        value = float(invalue)
-                    elif isinstance(invalue, int):
-                        value = float(invalue)
-                elif isinstance(invalue, bool):
-                    # bypass for bools - getting casted as ints
-                    value = bool(invalue)
-                elif isinstance(invalue, int):
-                    # convert ALL numbers to floats for influx
-                    value = float(invalue)
-                # convert datetime to timestamps of another flavor
-                elif isinstance(invalue, (datetime, date)):
-                    value = time_.mktime(invalue.timetuple())
-                    #value = int(ut)
-                # explicitly change enum values to strings
-                # TODO find a more reliable way to change enums to strings
-                elif invalue.__class__.__bases__[0].__name__ == 'enum':
-                    value = unicode(invalue)
-            except ValueError:
-                if mknumbers:
-                    # if we were trying to force numbers but couldn't
-                    value = None
-                pass
-        return value
+        self.type_cache = {}
 
     def to_json(self, device):
-        attrlist = [attr for attr in dir(device) if
-                    attr[:2] + attr[-2:] != '____' and not callable(getattr(device, attr))]
-        #indigo.server.log(device.name + ' ' + ' '.join(attrlist))
-        newjson = {}
-        newjson[u'name'] = unicode(device.name)
-        for key in attrlist:
-            #import pdb; pdb.set_trace()
-            if hasattr(device, key) \
-                and key not in newjson.keys():
-                val = self.smart_value(getattr(device, key), False);
+        attr_list = [
+            attr
+            for attr in dir(device)
+            if attr[:2] + attr[-2:] != "____" and not callable(getattr(device, attr))
+        ]
+        # indigo.server.log(device.name + ' ' + ' '.join(attr_list))
+        new_json = {"name": str(device.name)}
+        for key in attr_list:
+            # import pdb; pdb.set_trace()
+            if hasattr(device, key) and key not in new_json.keys():
+                val = smart_value(getattr(device, key), False)
                 # some things change types - define the original name as original type, key.num as numeric
-                if val != None:
-                    newjson[key] = val
-                if key in self.stringonly:
-                    continue
-                val = self.smart_value(getattr(device, key), True);
                 if val is not None:
-                    newjson[key + '.num'] = val
+                    new_json[key] = val
+                if key in self.string_only:
+                    continue
+                val = smart_value(getattr(device, key), True)
+                if val is not None:
+                    new_json[key + ".num"] = val
 
         # trouble areas
         # dicts end enums will not upload without a little abuse
-        for key in 'states globalProps pluginProps ' \
-            'ownerProps'.split():
-            if key in newjson.keys():
-                del newjson[key]
+        for key in "states globalProps pluginProps " "ownerProps".split():
+            if key in new_json.keys():
+                del new_json[key]
 
-        for key in newjson.keys():
-            if newjson[key].__class__.__name__.startswith('k'):
-                newjson[key] = unicode(newjson[key])
+        for key in new_json.keys():
+            if new_json[key].__class__.__name__.startswith("k"):
+                new_json[key] = str(new_json[key])
 
-        for key in self.stringonly:
-            if key in newjson.keys():
-                newjson[key] = unicode(newjson[key])
+        for key in self.string_only:
+            if key in new_json.keys():
+                new_json[key] = str(new_json[key])
 
         for state in device.states:
-            val = self.smart_value(device.states[state], False);
-            if val != None:
-                newjson[unicode('state.' + state)] = val
-            if state in self.stringonly:
+            val = smart_value(device.states[state], False)
+            if val is not None:
+                new_json[str("state." + state)] = val
+            if state in self.string_only:
                 continue
-            val = self.smart_value(device.states[state], True);
-            if val != None:
-                newjson[unicode('state.' + state + '.num')] = val
+            val = smart_value(device.states[state], True)
+            if val is not None:
+                new_json[str("state." + state + ".num")] = val
 
         # Try to tell the caller what kind of measurement this is
-        if u'setpointHeat' in device.states.keys():
-            newjson[u'measurement'] = u'thermostat_changes'
-        elif device.model == u'Weather Station':
-            newjson[u'measurement'] = u'weather_changes'
+        if "setpointHeat" in device.states.keys():
+            new_json["measurement"] = "thermostat_changes"
+        elif device.model == "Weather Station":
+            new_json["measurement"] = "weather_changes"
         else:
-            newjson[u'measurement'] = u'device_changes'
+            new_json["measurement"] = "device_changes"
 
         # try to honor previous complaints about column types
-        for key in self.typecache.keys():
-            if key in newjson.keys():
+        for key in self.type_cache.keys():
+            if key in new_json.keys():
                 try:
-                    newjson[key] = eval( '%s("%s")' % (self.typecache[key], str(newjson[key])))
+                    new_json[key] = eval(
+                        '%s("%s")' % (self.type_cache[key], str(new_json[key]))
+                    )
                 except ValueError:
                     if self.debug:
-                        indigo.server.log('One of the columns just will not convert to the requested type. Partial record written.')
+                        indigo.server.log(
+                            "One of the columns just will not convert to the requested type. Partial record written."
+                        )
                     pass
 
-        return newjson
+        return new_json
 
     def diff_to_json(self, device):
         # strip out matching values?
         # find or create our cache dict
-        newjson = self.to_json(device)
+        new_json = self.to_json(device)
 
         localcache = {}
         if device.name in self.cache.keys():
             localcache = self.cache[device.name]
 
         diffjson = {}
-        for kk, vv in newjson.iteritems():
+        for kk, vv in new_json.items():
             if kk not in localcache or localcache[kk] != vv:
                 if not isinstance(vv, indigo.Dict) and not isinstance(vv, dict):
                     diffjson[kk] = vv
 
-        if not device.name in self.cache.keys():
+        if device.name not in self.cache.keys():
             self.cache[device.name] = {}
-        self.cache[device.name].update(newjson)
+        self.cache[device.name].update(new_json)
 
         # always make sure these survive
-        diffjson['name'] = device.name
-        diffjson['id'] = float(device.id)
-        diffjson[u'measurement'] = newjson[u'measurement']
+        diffjson["name"] = device.name
+        diffjson["id"] = float(device.id)
+        diffjson["measurement"] = new_json["measurement"]
 
         if self.debug:
-            indigo.server.log(json.dumps(newjson, default=indigo_json_serial).encode('utf-8'))
-            indigo.server.log(u'diff:')
-            indigo.server.log(json.dumps(diffjson, default=indigo_json_serial).encode('utf-8'))
+            indigo.server.log(
+                json.dumps(new_json, default=indigo_json_serial).encode("utf-8")
+            )
+            indigo.server.log("diff:")
+            indigo.server.log(
+                json.dumps(diffjson, default=indigo_json_serial).encode("utf-8")
+            )
 
         return diffjson
-

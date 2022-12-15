@@ -13,5 +13,11 @@
 	<key>CFBundleVersion</key>
 	<string>1.0.1</string>
 	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>https://github.com/smurfless1/indigo-json-broadcaster/wiki</string>
+		</dict>
+	</array>
 </dict>
 </plist>

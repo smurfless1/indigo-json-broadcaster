@@ -3,18 +3,22 @@
 # Copyright (c) 2017, Dave Brown
 #
 import socket
+from typing import Any
+
 import indigo
-import time as time_
-from datetime import datetime, date
 import json
 from indigo_adaptor import IndigoAdaptor
 
-MCAST_GRP = '224.1.1.1'
+MCAST_GRP = "224.1.1.1"
 MCAST_PORT = 8087
+
 
 class Plugin(indigo.PluginBase):
     def __init__(self, pluginId, pluginDisplayName, pluginVersion, pluginPrefs):
-        super(Plugin, self).__init__(pluginId, pluginDisplayName, pluginVersion, pluginPrefs)
+        super(Plugin, self).__init__(
+            pluginId, pluginDisplayName, pluginVersion, pluginPrefs
+        )
+        self.port = MCAST_PORT
         indigo.devices.subscribeToChanges()
         indigo.variables.subscribeToChanges()
         self.connection = None
@@ -24,58 +28,60 @@ class Plugin(indigo.PluginBase):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
 
+    def send(
+        self,
+        tags: dict[str, str],
+        what: dict[str, Any],
+        measurement: str = "device_changes",
+    ):
+        """This sends a dict over multicast."""
+        json_body = [{"measurement": measurement, "tags": tags, "fields": what}]
 
-    # send this a dict of what to write
-    def send(self, tags, what, measurement='device_changes'):
-        json_body=[
-            {
-                'measurement': measurement,
-                'tags' : tags,
-                'fields':  what
-            }
-        ]
+        if self.pluginPrefs.get("debug", False):
+            indigo.server.log(json.dumps(json_body).encode("utf-8"))
 
-        if self.pluginPrefs.get(u'debug', False):
-            indigo.server.log(json.dumps(json_body).encode('utf-8'))
-
-        self.sock.sendto(json.dumps(json_body).encode('utf-8'), (MCAST_GRP, self.port))  # returns bool if needed
+        self.sock.sendto(
+            json.dumps(json_body).encode("utf-8"), (MCAST_GRP, self.port)
+        )  # returns bool if needed
 
     def startup(self):
-        self.port = int(self.pluginPrefs.get('port', '8086'))
+        self.port = int(self.pluginPrefs.get("port", MCAST_PORT))
 
-# called after runConcurrentThread() exits
     def shutdown(self):
+        """Called after runConcurrentThread() exits"""
         pass
 
     def deviceUpdated(self, origDev, newDev):
+        """
+        Update from origDev to newDev
+        """
         # call base implementation
         indigo.PluginBase.deviceUpdated(self, origDev, newDev)
 
         # custom add to influx work
         # tag by folder if present
-        tagnames = u'name folderId'.split()
-        newjson = self.adaptor.diff_to_json(newDev)
+        tag_names = "name folderId".split()
+        new_json = self.adaptor.diff_to_json(newDev)
 
-        newtags = {}
-        for tag in tagnames:
-            newtags[tag] = unicode(getattr(newDev, tag))
+        new_tags: dict[str, str] = {}
+        for tag in tag_names:
+            new_tags[tag] = str(getattr(newDev, tag))
 
         # add a folder name tag
-        if hasattr(newDev, u'folderId') and newDev.folderId != 0:
-            newtags[u'folder'] = indigo.devices.folders[newDev.folderId].name
+        if hasattr(newDev, "folderId") and newDev.folderId != 0:
+            new_tags["folder"] = indigo.devices.folders[newDev.folderId].name
 
-        measurement = newjson[u'measurement']
-        del newjson[u'measurement']
-        self.send(tags=newtags, what=newjson, measurement=measurement)
+        measurement = new_json["measurement"]
+        del new_json["measurement"]
+        self.send(tags=new_tags, what=new_json, measurement=measurement)
 
     def variableUpdated(self, origVar, newVar):
         indigo.PluginBase.variableUpdated(self, origVar, newVar)
 
-        newtags = {u'varname': newVar.name}
-        newjson = {u'name': newVar.name, u'value': newVar.value }
-        numval = self.adaptor.smart_value(newVar.value, True)
-        if numval != None:
-            newjson[u'value.num'] = numval
+        new_tags: dict[str, str] = {"varname": newVar.name}
+        new_json: dict[str, Any] = {"name": newVar.name, "value": newVar.value}
+        numeric_value = self.adaptor.smart_value(newVar.value, True)
+        if numeric_value is not None:
+            new_json["value.num"] = numeric_value
 
-        self.send(tags=newtags, what=newjson, measurement=u'variable_changes')
-
+        self.send(tags=new_tags, what=new_json, measurement="variable_changes")

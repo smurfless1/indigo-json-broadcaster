@@ -7,6 +7,7 @@ from indigo_adaptor import IndigoAdaptor
 
 MCAST_GRP = "224.1.1.1"
 MCAST_PORT = 8087
+MCAST_TTL = 2
 
 
 class Plugin(indigo.PluginBase):
@@ -22,7 +23,7 @@ class Plugin(indigo.PluginBase):
         self.folders = {}
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+        self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, MCAST_TTL)
 
     def send(
         self,
